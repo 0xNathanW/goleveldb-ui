@@ -1,22 +1,15 @@
 package main
 
 import (
-	"log"
 	"os"
+
+	"github.com/0xNathanW/goleveldb-ui/ui"
 )
 
 func main() {
 
-	dbPath := os.Args[1]
-	if !verifyPath(dbPath) {
-		log.Fatal("Invalid database path")
-	}
+	path := os.Args[1]
+	app := ui.NewUI(path)
+	app.Run()
 
-}
-
-func verifyPath(dbPath string) bool {
-	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
-		return false
-	}
-	return true
 }
