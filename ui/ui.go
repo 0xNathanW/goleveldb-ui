@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/gdamore/tcell/v2"
@@ -25,10 +26,10 @@ func NewUI(dbPath string) *ui {
 	// database init
 	db, err := leveldb.OpenFile(dbPath, &opt.Options{ErrorIfMissing: true})
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(fmt.Errorf("failed to open database: %w", err))
 	}
 	if err := db.SetReadOnly(); err != nil {
-		log.Fatal(err)
+		log.Fatal(fmt.Errorf("failed to set database to read-only: %w", err))
 	}
 
 	ui := &ui{
@@ -45,9 +46,12 @@ func NewUI(dbPath string) *ui {
 			SetDirection(tview.FlexRow),
 
 		keys: tview.NewList().
-			ShowSecondaryText(false),
+			ShowSecondaryText(false).
+			SetHighlightFullLine(true),
 
-		value: tview.NewTextView(),
+		value: tview.NewTextView().
+			SetScrollable(true).
+			SetWrap(true),
 
 		search: tview.NewInputField().
 			SetLabel("Search: ").
@@ -75,6 +79,19 @@ func NewUI(dbPath string) *ui {
 		SetBorderPadding(1, 1, 2, 2)
 	ui.search.SetBorder(true)
 
+	// Set changed.
+	ui.keys.SetChangedFunc(
+		func(index int, mainText string, secondaryText string, shortcut rune) {
+			key := []byte(secondaryText)
+			value, err := ui.db.Get(key, nil)
+			if err != nil {
+				log.Fatal(fmt.Errorf("list change key err: %s", err))
+			}
+			_ = value
+			ui.value.SetText(mainText)
+		},
+	)
+
 	// Load inital keys.
 	ui.loadKeyBatch(nil)
 
@@ -87,6 +104,7 @@ func (ui *ui) Run() {
 	if err := ui.app.SetRoot(ui.layout, true).Run(); err != nil {
 		panic(err)
 	}
+
 }
 
 func (ui *ui) loadKeyBatch(from []byte) {
@@ -97,13 +115,15 @@ func (ui *ui) loadKeyBatch(from []byte) {
 	)
 	defer iter.Release()
 
-	_, _, _, h := ui.keys.GetInnerRect()
-	for i := 0; i < h; i++ {
-		if !iter.Next() {
-			break
-		}
+	_, _, _, _ = ui.keys.GetInnerRect()
+
+	for iter.Next() {
 		key := iter.Key()
-		ui.keys.AddItem(string(key), "", 0, nil)
+		ui.keys.AddItem(fmtOut(key), string(key), 0, nil)
 	}
 
+}
+
+func fmtOut(data []byte) string {
+	return fmt.Sprintf("%X", data)
 }

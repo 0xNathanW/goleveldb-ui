@@ -16,9 +16,9 @@ func main() {
 	}
 	defer db.Close()
 
-	for i := 0; i < 10; i++ {
-		putRandomBytes(db)
-	}
+	// for i := 0; i < 10; i++ {
+	// 	putRandomBytes(db)
+	// }
 
 	iterateDB(db)
 
