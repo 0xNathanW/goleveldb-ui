@@ -11,6 +11,14 @@ import (
 	"github.com/syndtr/goleveldb/leveldb/util"
 )
 
+// Format options.
+const (
+	Str = iota // String
+	Hex        // Hex
+	Num        // Number
+	Bin        // Binary
+)
+
 type ui struct {
 	db     *leveldb.DB
 	app    *tview.Application
@@ -19,9 +27,14 @@ type ui struct {
 	keys   *tview.List
 	value  *tview.TextView
 	search *tview.InputField
+	format uint
 }
 
-func NewUI(dbPath string) *ui {
+type UiOpts struct {
+	Format uint
+}
+
+func NewUI(dbPath string, opts *UiOpts) *ui {
 
 	// database init
 	db, err := leveldb.OpenFile(dbPath, &opt.Options{ErrorIfMissing: true})
@@ -58,6 +71,8 @@ func NewUI(dbPath string) *ui {
 			SetPlaceholder("Ctrl-S").
 			SetPlaceholderTextColor(tcell.ColorGreen).
 			SetFieldBackgroundColor(tcell.ColorRed),
+
+		format: opts.Format,
 	}
 
 	// Left side flex layout.
@@ -82,13 +97,11 @@ func NewUI(dbPath string) *ui {
 	// Set changed.
 	ui.keys.SetChangedFunc(
 		func(index int, mainText string, secondaryText string, shortcut rune) {
-			key := []byte(secondaryText)
-			value, err := ui.db.Get(key, nil)
+			value, err := ui.db.Get([]byte(secondaryText), nil)
 			if err != nil {
 				log.Fatal(fmt.Errorf("list change key err: %s", err))
 			}
-			_ = value
-			ui.value.SetText(mainText)
+			ui.value.SetText(ui.fmtOut(value))
 		},
 	)
 
@@ -115,15 +128,25 @@ func (ui *ui) loadKeyBatch(from []byte) {
 	)
 	defer iter.Release()
 
-	_, _, _, _ = ui.keys.GetInnerRect()
-
-	for iter.Next() {
+	_, _, _, h := ui.keys.GetInnerRect()
+	var i int
+	for iter.Next() && i < h {
 		key := iter.Key()
-		ui.keys.AddItem(fmtOut(key), string(key), 0, nil)
+		ui.keys.AddItem(ui.fmtOut(key), string(key), 0, nil)
 	}
 
 }
 
-func fmtOut(data []byte) string {
-	return fmt.Sprintf("%X", data)
+func (ui *ui) fmtOut(data []byte) string {
+	switch ui.format {
+	case Str:
+		return string(data)
+	case Hex:
+		return fmt.Sprintf("%x", data)
+	case Num:
+		return fmt.Sprintf("%d", data)
+	case Bin:
+		return fmt.Sprintf("%b", data)
+	}
+	return ""
 }
