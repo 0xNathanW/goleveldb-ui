@@ -6,3 +6,11 @@
 2022/02/16 04:03:07 list change key err: leveldb: not found
 2022/02/16 04:03:10 list change key err: leveldb: not found
 2022/02/16 04:04:59 list change key err: leveldb: not found
+2022/02/19 03:43:12 Height: 6
+2022/02/19 03:43:44 Height: 6
+2022/02/19 03:45:14 Height: 10
+2022/02/19 03:45:41 Height: 10
+2022/02/19 03:48:26 failed to open database: mkdir : no such file or directory
+2022/02/19 03:48:42 Height: 10
+2022/02/19 03:49:06 Height: 10
+2022/02/19 03:53:31 database size:  []

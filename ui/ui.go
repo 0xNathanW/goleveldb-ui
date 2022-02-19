@@ -24,7 +24,12 @@ type ui struct {
 	app    *tview.Application
 	layout *tview.Grid
 	left   *tview.Flex
-	keys   *tview.List
+
+	keys    *tview.List
+	prevIdx int // previous index of key, used for pagination.
+	max     int // max keys per page.
+	page    int // current page.
+
 	value  *tview.TextView
 	search *tview.InputField
 	format uint
@@ -32,6 +37,7 @@ type ui struct {
 
 type UiOpts struct {
 	Format uint
+	Max    int
 }
 
 func NewUI(dbPath string, opts *UiOpts) *ui {
@@ -60,7 +66,8 @@ func NewUI(dbPath string, opts *UiOpts) *ui {
 
 		keys: tview.NewList().
 			ShowSecondaryText(false).
-			SetHighlightFullLine(true),
+			SetHighlightFullLine(true).
+			SetWrapAround(false),
 
 		value: tview.NewTextView().
 			SetScrollable(true).
@@ -85,7 +92,7 @@ func NewUI(dbPath string, opts *UiOpts) *ui {
 
 	// Box setup.
 	ui.keys.SetBorder(true).
-		SetTitle(" Keys ").
+		SetTitle(" Keys - page: 1").
 		SetTitleAlign(tview.AlignLeft).
 		SetBorderPadding(1, 1, 2, 2)
 	ui.value.SetBorder(true).
@@ -94,9 +101,15 @@ func NewUI(dbPath string, opts *UiOpts) *ui {
 		SetBorderPadding(1, 1, 2, 2)
 	ui.search.SetBorder(true)
 
+	// Override key bindings.
+
 	// Set changed.
 	ui.keys.SetChangedFunc(
 		func(index int, mainText string, secondaryText string, shortcut rune) {
+
+			if index == 0 && index == ui.prevIdx {
+			}
+
 			value, err := ui.db.Get([]byte(secondaryText), nil)
 			if err != nil {
 				log.Fatal(fmt.Errorf("list change key err: %s", err))
@@ -106,7 +119,7 @@ func NewUI(dbPath string, opts *UiOpts) *ui {
 	)
 
 	// Load inital keys.
-	ui.loadKeyBatch(nil)
+	ui.loadKeyBatch(nil, 100)
 
 	return ui
 }
@@ -118,7 +131,7 @@ func (ui *ui) Run() {
 	}
 }
 
-func (ui *ui) loadKeyBatch(from []byte) {
+func (ui *ui) nextKeyBatch(from []byte) {
 
 	iter := ui.db.NewIterator(
 		&util.Range{Start: from, Limit: nil},
@@ -126,13 +139,32 @@ func (ui *ui) loadKeyBatch(from []byte) {
 	)
 	defer iter.Release()
 
-	_, _, _, h := ui.keys.GetInnerRect()
 	var i int
-	for iter.Next() && i < h {
+	for iter.Next() && i < ui.max {
 		key := iter.Key()
 		ui.keys.AddItem(ui.fmtOut(key), string(key), 0, nil)
+		i++
 	}
+	ui.page++
+	ui.keys.SetTitle(fmt.Sprintf(" Keys - page: %d", ui.page))
+}
 
+func (ui *ui) previousKeyBatch(to []byte) {
+
+	iter := ui.db.NewIterator(
+		&util.Range{Start: nil, Limit: to},
+		nil,
+	)
+	defer iter.Release()
+
+	var i int
+	for iter.Prev() && i < ui.max {
+		key := iter.Key()
+		ui.keys.AddItem(ui.fmtOut(key), string(key), 0, nil)
+		i++
+	}
+	ui.page--
+	ui.keys.SetTitle(fmt.Sprintf(" Keys - page: %d", ui.page))
 }
 
 func (ui *ui) fmtOut(data []byte) string {

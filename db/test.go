@@ -16,9 +16,9 @@ func main() {
 	}
 	defer db.Close()
 
-	// for i := 0; i < 10; i++ {
-	// 	putRandomBytes(db)
-	// }
+	for i := 0; i < 100; i++ {
+		putRandomBytes(db, int64(i+2c))
+	}
 
 	iterateDB(db)
 
@@ -36,7 +36,8 @@ func iterateDB(db *leveldb.DB) {
 	}
 }
 
-func putRandomBytes(db *leveldb.DB) {
+func putRandomBytes(db *leveldb.DB, seed int64) {
+	rand.Seed(seed)
 	b := make([]byte, 20)
 	_, err := rand.Read(b)
 	if err != nil {

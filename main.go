@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
 	"os"
 
 	"github.com/0xNathanW/goleveldb-ui/ui"
@@ -20,9 +21,18 @@ var (
 var (
 	dbPath    string
 	formatOpt string
+	uiOpts    ui.UiOpts
 )
 
 func main() {
+
+	f, err := os.OpenFile("logs.txt", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		log.Fatalf("error opening logs file: %v", err)
+	}
+
+	log.SetOutput(f)
+
 	flag.Parse()
 	fmtOpt, ok := formatMap[formatOpt]
 	if !ok {
@@ -50,4 +60,5 @@ func init() {
 
 	flag.StringVar(&formatOpt, "fmt", "hex", fmtHelp)
 	flag.StringVar(&dbPath, "db", "", "Path to database.\n")
+	flag.IntVar(&uiOpts.Max, "max", 100, "Max keys per page.\n")
 }
