@@ -1,11 +1,11 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 
 	"github.com/0xNathanW/goleveldb-ui/ui"
-	flag "github.com/alecthomas/kong"
 )
 
 var (
@@ -31,16 +31,23 @@ func main() {
 	}
 
 	fmt.Println("format: ", fmtOpt)
-	//fmt.Println("path: ", path)
+	fmt.Println("path: ", dbPath)
 
-	// app := ui.NewUI(path, &ui.UiOpts{
-	// 	Format: formatMap[formatOpt],
-	// })
-	// app.Run()
+	app := ui.NewUI(dbPath, &ui.UiOpts{
+		Format: formatMap[formatOpt],
+	})
+	app.Run()
 
 }
 
 func init() {
-	flag.StringVar(&formatOpt, "fmt", "hex", "format to display keys and values")
-	flag.StringVar(&dbPath, "db", "", "path to database")
+
+	fmtHelp := "How to format the output. Valid options are:\n" +
+		"\thex - hexadecimal\n" +
+		"\tstring\n" +
+		"\tnum - integer\n" +
+		"\tbin - binary\n"
+
+	flag.StringVar(&formatOpt, "fmt", "hex", fmtHelp)
+	flag.StringVar(&dbPath, "db", "", "Path to database.\n")
 }

@@ -112,12 +112,10 @@ func NewUI(dbPath string, opts *UiOpts) *ui {
 }
 
 func (ui *ui) Run() {
-
 	// Run the application.
 	if err := ui.app.SetRoot(ui.layout, true).Run(); err != nil {
 		panic(err)
 	}
-
 }
 
 func (ui *ui) loadKeyBatch(from []byte) {
