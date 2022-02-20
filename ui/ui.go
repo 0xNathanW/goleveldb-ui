@@ -30,10 +30,11 @@ type ui struct {
 	keys *tview.List
 	max  int // max keys per page.
 	page int // current page.
+	prev int // 0 if last page move was forward, 1 if backward.
 
 	value  *tview.TextView
 	search *tview.InputField
-	format uint
+	format uint // How text is formatted.
 }
 
 type UiOpts struct {
@@ -115,11 +116,7 @@ func NewUI(dbPath string, opts *UiOpts) *ui {
 
 			case tcell.KeyDown:
 				if ui.keys.GetCurrentItem() == ui.keys.GetItemCount()-1 {
-					log.Println("next page")
-					ui.keys.Clear()
 					ui.nextKeyBatch()
-					ui.page++
-					ui.keys.SetTitle(fmt.Sprintf(" Keys - page: %d ", ui.page))
 					return nil
 				} else { // If not last item, pass to default handler.
 					return event
@@ -127,11 +124,7 @@ func NewUI(dbPath string, opts *UiOpts) *ui {
 
 			case tcell.KeyUp:
 				if ui.keys.GetCurrentItem() == 0 && ui.page > 1 {
-					log.Println("previous page")
-					ui.keys.Clear()
 					ui.previousKeyBatch()
-					ui.page--
-					ui.keys.SetTitle(fmt.Sprintf(" Keys - page: %d ", ui.page))
 					return nil
 				} else { // If not first item, pass to default handler.
 					return event
@@ -152,7 +145,6 @@ func NewUI(dbPath string, opts *UiOpts) *ui {
 
 	// Load inital keys.
 	iter.First() // Move to first key.
-	ui.page = 1  // Set page to 1.
 	ui.nextKeyBatch()
 
 	return ui
@@ -168,28 +160,55 @@ func (ui *ui) Run() {
 
 func (ui *ui) nextKeyBatch() {
 
+	if ui.prev == 1 {
+		for i := 0; i < ui.keys.GetItemCount()+1; i++ {
+			ui.iter.Next()
+		}
+	}
+
+	ui.keys.Clear()
+
 	var i int
-	for ui.iter.Next() && (i < ui.max) {
+	for i < ui.max {
 		key := ui.iter.Key()
 		ui.keys.AddItem(ui.fmtOut(key), string(key), 0, nil)
 		i++
-		ui.iter.Next()
+		if !ui.iter.Next() {
+			break
+		}
 	}
 
+	log.Println(string(ui.iter.Key()))
+	ui.page++
+	ui.keys.SetTitle(fmt.Sprintf(" Keys - page: %d ", ui.page))
 	ui.keys.SetCurrentItem(0)
+	ui.prev = 0
 }
 
 func (ui *ui) previousKeyBatch() {
 
+	if ui.prev == 0 {
+		for i := 0; i < ui.keys.GetItemCount()+1; i++ {
+			ui.iter.Prev()
+		}
+	}
+
+	ui.keys.Clear()
 	var i int
-	for ui.iter.Prev() && i < ui.max {
+	for i < ui.max {
 		key := ui.iter.Key()
 		ui.keys.InsertItem(0, ui.fmtOut(key), string(key), 0, nil)
 		i++
-		ui.iter.Prev()
+		if !ui.iter.Prev() {
+			break
+		}
 	}
 
+	log.Println(string(ui.iter.Key()))
+	ui.page--
+	ui.keys.SetTitle(fmt.Sprintf(" Keys - page: %d ", ui.page))
 	ui.keys.SetCurrentItem(ui.keys.GetItemCount() - 1)
+	ui.prev = 1
 }
 
 func (ui *ui) fmtOut(data []byte) string {
@@ -211,6 +230,3 @@ func (ui *ui) shutdown() {
 	ui.iter.Release()
 	ui.db.Close()
 }
-
-// Idea: implement iterator into the struct, using same for next and prev page.
-// If search, we can switch out the iterator.
