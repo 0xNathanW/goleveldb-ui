@@ -26,26 +26,21 @@ var (
 
 func main() {
 
-	f, err := os.OpenFile("logs.txt", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	f, err := os.OpenFile("log.txt", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
-		log.Fatalf("error opening logs file: %v", err)
+		log.Fatalln("error opening file:", err)
 	}
-
 	log.SetOutput(f)
 
 	flag.Parse()
 	fmtOpt, ok := formatMap[formatOpt]
 	if !ok {
 		fmt.Printf("invalid format: %v\n", formatOpt)
-		os.Exit(1)
+		os.Exit(30)
 	}
+	uiOpts.Format = fmtOpt
 
-	fmt.Println("format: ", fmtOpt)
-	fmt.Println("path: ", dbPath)
-
-	app := ui.NewUI(dbPath, &ui.UiOpts{
-		Format: formatMap[formatOpt],
-	})
+	app := ui.NewUI(dbPath, &uiOpts)
 	app.Run()
 
 }
@@ -59,6 +54,6 @@ func init() {
 		"\tbin - binary\n"
 
 	flag.StringVar(&formatOpt, "fmt", "hex", fmtHelp)
-	flag.StringVar(&dbPath, "db", "", "Path to database.\n")
-	flag.IntVar(&uiOpts.Max, "max", 100, "Max keys per page.\n")
+	flag.StringVar(&dbPath, "db", "", "Path to database. Required.")
+	flag.IntVar(&uiOpts.Max, "max", 5, "Max keys per page.")
 }

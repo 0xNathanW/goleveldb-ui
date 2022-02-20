@@ -7,8 +7,8 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 	"github.com/syndtr/goleveldb/leveldb"
+	"github.com/syndtr/goleveldb/leveldb/iterator"
 	"github.com/syndtr/goleveldb/leveldb/opt"
-	"github.com/syndtr/goleveldb/leveldb/util"
 )
 
 // Format options.
@@ -20,15 +20,16 @@ const (
 )
 
 type ui struct {
-	db     *leveldb.DB
+	db   *leveldb.DB
+	iter iterator.Iterator
+
 	app    *tview.Application
 	layout *tview.Grid
 	left   *tview.Flex
 
-	keys    *tview.List
-	prevIdx int // previous index of key, used for pagination.
-	max     int // max keys per page.
-	page    int // current page.
+	keys *tview.List
+	max  int // max keys per page.
+	page int // current page.
 
 	value  *tview.TextView
 	search *tview.InputField
@@ -50,9 +51,12 @@ func NewUI(dbPath string, opts *UiOpts) *ui {
 	if err := db.SetReadOnly(); err != nil {
 		log.Fatal(fmt.Errorf("failed to set database to read-only: %w", err))
 	}
+	iter := db.NewIterator(nil, nil)
 
 	ui := &ui{
 		db: db,
+
+		iter: iter,
 
 		app: tview.NewApplication().
 			EnableMouse(false),
@@ -68,6 +72,8 @@ func NewUI(dbPath string, opts *UiOpts) *ui {
 			ShowSecondaryText(false).
 			SetHighlightFullLine(true).
 			SetWrapAround(false),
+
+		max: opts.Max,
 
 		value: tview.NewTextView().
 			SetScrollable(true).
@@ -92,7 +98,7 @@ func NewUI(dbPath string, opts *UiOpts) *ui {
 
 	// Box setup.
 	ui.keys.SetBorder(true).
-		SetTitle(" Keys - page: 1").
+		SetTitle(" Keys - page: 1 ").
 		SetTitleAlign(tview.AlignLeft).
 		SetBorderPadding(1, 1, 2, 2)
 	ui.value.SetBorder(true).
@@ -101,25 +107,53 @@ func NewUI(dbPath string, opts *UiOpts) *ui {
 		SetBorderPadding(1, 1, 2, 2)
 	ui.search.SetBorder(true)
 
-	// Override key bindings.
+	// Intercept and override relevant key bindings.
+	ui.keys.SetInputCapture(
+		func(event *tcell.EventKey) *tcell.EventKey {
+
+			switch key := event.Key(); key {
+
+			case tcell.KeyDown:
+				if ui.keys.GetCurrentItem() == ui.keys.GetItemCount()-1 {
+					log.Println("next page")
+					ui.keys.Clear()
+					ui.nextKeyBatch()
+					ui.page++
+					ui.keys.SetTitle(fmt.Sprintf(" Keys - page: %d ", ui.page))
+					return nil
+				} else { // If not last item, pass to default handler.
+					return event
+				}
+
+			case tcell.KeyUp:
+				if ui.keys.GetCurrentItem() == 0 && ui.page > 1 {
+					log.Println("previous page")
+					ui.keys.Clear()
+					ui.previousKeyBatch()
+					ui.page--
+					ui.keys.SetTitle(fmt.Sprintf(" Keys - page: %d ", ui.page))
+					return nil
+				} else { // If not first item, pass to default handler.
+					return event
+				}
+
+			}
+			return event
+		},
+	)
 
 	// Set changed.
 	ui.keys.SetChangedFunc(
 		func(index int, mainText string, secondaryText string, shortcut rune) {
-
-			if index == 0 && index == ui.prevIdx {
-			}
-
-			value, err := ui.db.Get([]byte(secondaryText), nil)
-			if err != nil {
-				log.Fatal(fmt.Errorf("list change key err: %s", err))
-			}
+			value, _ := ui.db.Get([]byte(secondaryText), nil) // err not possible.
 			ui.value.SetText(ui.fmtOut(value))
 		},
 	)
 
 	// Load inital keys.
-	ui.loadKeyBatch(nil, 100)
+	iter.First() // Move to first key.
+	ui.page = 1  // Set page to 1.
+	ui.nextKeyBatch()
 
 	return ui
 }
@@ -127,44 +161,35 @@ func NewUI(dbPath string, opts *UiOpts) *ui {
 func (ui *ui) Run() {
 	// Run the application.
 	if err := ui.app.SetRoot(ui.layout, true).Run(); err != nil {
-		panic(err)
+		ui.db.Close()
+		log.Fatal(err)
 	}
 }
 
-func (ui *ui) nextKeyBatch(from []byte) {
-
-	iter := ui.db.NewIterator(
-		&util.Range{Start: from, Limit: nil},
-		nil,
-	)
-	defer iter.Release()
+func (ui *ui) nextKeyBatch() {
 
 	var i int
-	for iter.Next() && i < ui.max {
-		key := iter.Key()
+	for ui.iter.Next() && (i < ui.max) {
+		key := ui.iter.Key()
 		ui.keys.AddItem(ui.fmtOut(key), string(key), 0, nil)
 		i++
+		ui.iter.Next()
 	}
-	ui.page++
-	ui.keys.SetTitle(fmt.Sprintf(" Keys - page: %d", ui.page))
+
+	ui.keys.SetCurrentItem(0)
 }
 
-func (ui *ui) previousKeyBatch(to []byte) {
-
-	iter := ui.db.NewIterator(
-		&util.Range{Start: nil, Limit: to},
-		nil,
-	)
-	defer iter.Release()
+func (ui *ui) previousKeyBatch() {
 
 	var i int
-	for iter.Prev() && i < ui.max {
-		key := iter.Key()
-		ui.keys.AddItem(ui.fmtOut(key), string(key), 0, nil)
+	for ui.iter.Prev() && i < ui.max {
+		key := ui.iter.Key()
+		ui.keys.InsertItem(0, ui.fmtOut(key), string(key), 0, nil)
 		i++
+		ui.iter.Prev()
 	}
-	ui.page--
-	ui.keys.SetTitle(fmt.Sprintf(" Keys - page: %d", ui.page))
+
+	ui.keys.SetCurrentItem(ui.keys.GetItemCount() - 1)
 }
 
 func (ui *ui) fmtOut(data []byte) string {
@@ -180,3 +205,12 @@ func (ui *ui) fmtOut(data []byte) string {
 	}
 	return ""
 }
+
+func (ui *ui) shutdown() {
+	ui.app.Stop()
+	ui.iter.Release()
+	ui.db.Close()
+}
+
+// Idea: implement iterator into the struct, using same for next and prev page.
+// If search, we can switch out the iterator.
