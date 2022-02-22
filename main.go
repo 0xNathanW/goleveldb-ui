@@ -19,9 +19,10 @@ var (
 )
 
 var (
-	dbPath    string
-	formatOpt string
-	uiOpts    ui.UiOpts
+	dbPath string
+	keyFmt string
+	valFmt string
+	uiOpts ui.UiOpts
 )
 
 func main() {
@@ -33,12 +34,22 @@ func main() {
 	log.SetOutput(f)
 
 	flag.Parse()
-	fmtOpt, ok := formatMap[formatOpt]
+	key, ok := formatMap[keyFmt]
 	if !ok {
-		fmt.Printf("invalid format: %v\n", formatOpt)
+		fmt.Printf("invalid format: %v\n", keyFmt)
 		os.Exit(30)
 	}
-	uiOpts.Format = fmtOpt
+	if key != ui.Str && key != ui.Hex {
+		fmt.Println("key format must be string or hex")
+		os.Exit(30)
+	}
+
+	val, ok := formatMap[valFmt]
+	if !ok {
+		fmt.Printf("invalid format: %v\n", valFmt)
+		os.Exit(30)
+	}
+	uiOpts.KeyFmt, uiOpts.ValFmt = key, val
 
 	app := ui.NewUI(dbPath, &uiOpts)
 	app.Run()
@@ -47,13 +58,9 @@ func main() {
 
 func init() {
 
-	fmtHelp := "How to format the output. Valid options are:\n" +
-		"\thex - hexadecimal\n" +
-		"\tstring\n" +
-		"\tnum - integer\n" +
-		"\tbin - binary\n"
-
-	flag.StringVar(&formatOpt, "fmt", "hex", fmtHelp)
+	flag.StringVar(&keyFmt, "key", "string", "Key format")
+	flag.StringVar(&valFmt, "val", "string", "Value format")
 	flag.StringVar(&dbPath, "db", "", "Path to database. Required.")
 	flag.IntVar(&uiOpts.Max, "max", 5, "Max keys per page.")
+
 }
