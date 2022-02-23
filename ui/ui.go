@@ -153,10 +153,12 @@ func NewUI(dbPath string, opts *UiOpts) *ui {
 				ui.nextKeyBatch()
 				return nil
 
-			case tcell.KeyCtrlLeftSq:
+			case tcell.KeyCtrlO:
 				ui.shiftRatio(false)
-			case tcell.KeyCtrlRightSq:
+				return nil
+			case tcell.KeyCtrlP:
 				ui.shiftRatio(true)
+				return nil
 			}
 
 			return event
@@ -167,11 +169,16 @@ func NewUI(dbPath string, opts *UiOpts) *ui {
 
 			switch key := event.Key(); key {
 
-			case tcell.KeyBackspace:
+			case tcell.KeyEscape:
 				ui.app.SetFocus(ui.keys)
 				return nil
 
-			case tcell.KeyCtrlLeftSq:
+			case tcell.KeyCtrlO:
+				ui.shiftRatio(false)
+				return nil
+			case tcell.KeyCtrlP:
+				ui.shiftRatio(true)
+				return nil
 			}
 			return event
 		},
@@ -203,6 +210,12 @@ func NewUI(dbPath string, opts *UiOpts) *ui {
 			if key == tcell.KeyEscape {
 				ui.app.SetFocus(ui.keys)
 			}
+		},
+	)
+	ui.search.SetFocusFunc(
+		func() {
+			ui.search.SetFieldTextColor(tcell.ColorDefault)
+			ui.search.SetText("")
 		},
 	)
 
@@ -279,38 +292,49 @@ func (ui *ui) previousKeyBatch() {
 	ui.prev = 1
 }
 
-func (ui *ui) keyOut(data []byte) string {
-	switch ui.keyFmt {
-	case Str:
-		return string(data)
-	case Hex:
-		return hex.EncodeToString(data)
+func (ui *ui) changeKeyFmt(format uint) {
+	for i := 0; i < ui.keys.GetItemCount(); i++ {
+		_, key := ui.keys.GetItemText(i)
+		ui.keys.SetItemText(i, ui.keyOut([]byte(key)), key)
 	}
-	return ""
 }
 
+func (ui *ui) keyOut(data []byte) string {
+	var out string
+	switch ui.keyFmt {
+	case Str:
+		out = string(data)
+	case Hex:
+		out = "0x" + hex.EncodeToString(data)
+	}
+	return out
+}
+
+// Decodes from formatted to original.
 func (ui *ui) keyIn(data string) []byte {
+	var out []byte
 	switch ui.keyFmt {
 	case Hex:
-		i, _ := hex.DecodeString(data)
-		return i
+		out, _ = hex.DecodeString(data)
 	default:
-		return []byte(data)
+		out = []byte(data)
 	}
+	return out
 }
 
 func (ui *ui) valOut(data []byte) string {
+	var out string
 	switch ui.valFmt {
 	case Str:
-		return string(data)
+		out = string(data)
 	case Hex:
-		return hex.EncodeToString(data)
+		out = "0x" + hex.EncodeToString(data)
 	case Num:
-		return fmt.Sprintf("%d", data)
+		out = fmt.Sprintf("%d", data)
 	case Bin:
-		return fmt.Sprintf("%b", data)
+		out = fmt.Sprintf("%b", data)
 	}
-	return ""
+	return out
 }
 
 func (ui *ui) handleInput(input string) {
@@ -326,6 +350,7 @@ func (ui *ui) handleInput(input string) {
 	if input[0] == '$' {
 		params := strings.Split(input[1:], "=")
 		if len(params) != 2 {
+			ui.searchErr("Need a parameter and value.")
 			return
 		}
 
@@ -336,9 +361,12 @@ func (ui *ui) handleInput(input string) {
 
 			case "hex":
 				ui.keyFmt = Hex
-
+				ui.changeKeyFmt(ui.keyFmt)
 			case "string":
 				ui.keyFmt = Str
+				ui.changeKeyFmt(ui.keyFmt)
+			default:
+				ui.searchErr("Invalid key format.")
 			}
 
 		case "val":
@@ -352,17 +380,25 @@ func (ui *ui) handleInput(input string) {
 				ui.valFmt = Num
 			case "binary":
 				ui.valFmt = Bin
+			default:
+				ui.searchErr("Invalid value format.")
 			}
 
 		case "max":
-			ui.max, _ = strconv.Atoi(params[1])
-
+			var err error
+			ui.max, err = strconv.Atoi(params[1])
+			if err != nil {
+				ui.searchErr("Invalid max value.")
+				return
+			}
 		}
 		return
 	}
 
-	ui.iter = ui.db.NewIterator(util.BytesPrefix([]byte(ui.keyIn(input))), nil)
+	from := ui.keyIn(input)
+	ui.iter = ui.db.NewIterator(util.BytesPrefix(from), nil)
 	ui.iter.First()
+
 	ui.prev, ui.page = 0, 0
 	ui.nextKeyBatch()
 }
@@ -375,7 +411,7 @@ func (ui *ui) shiftRatio(right bool) {
 		ui.ratio--
 	}
 
-	// max ration is 4.
+	// max ratio is 4.
 	if ui.ratio > 4 {
 		ui.ratio = 4
 		return
@@ -392,4 +428,9 @@ func (ui *ui) shiftRatio(right bool) {
 	} else {
 		ui.layout.SetColumns(-ui.ratio, 0)
 	}
+}
+
+func (ui *ui) searchErr(msg string) {
+	ui.search.SetFieldTextColor(tcell.ColorRed)
+	ui.search.SetText(msg)
 }

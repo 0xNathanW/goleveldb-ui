@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"os"
 	"strconv"
 
 	"github.com/syndtr/goleveldb/leveldb"
@@ -11,19 +12,23 @@ import (
 
 func main() {
 
+	f, err := os.OpenFile("logs.txt", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		log.Fatalln("error opening file:", err)
+	}
+	log.SetOutput(f)
+
 	db, err := leveldb.OpenFile("./test-db", nil)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer db.Close()
 
-	for i := 0; i < 100; i++ {
-		if err := db.Put([]byte(strconv.Itoa(i)), []byte(strconv.Itoa(i)), nil); err != nil {
-			log.Fatal(err)
-		}
+	for i := 0; i < 1000; i++ {
+		_ = db.Put([]byte(strconv.Itoa(i)), []byte(strconv.Itoa(i)), nil)
 	}
 
-	iterateDB(db)
+	//iterateDB(db)
 }
 
 func iterateDB(db *leveldb.DB) {
@@ -62,12 +67,19 @@ func flipFlop(db *leveldb.DB) {
 
 func putRandomBytes(db *leveldb.DB, seed int64) {
 	rand.Seed(seed)
-	b := make([]byte, 20)
-	_, err := rand.Read(b)
+	k := make([]byte, 20)
+	v := make([]byte, 100)
+	_, err := rand.Read(k)
 	if err != nil {
 		log.Fatal(err)
 	}
-	err = db.Put(b, b, nil)
+	rand.Seed(seed * 2)
+	_, err = rand.Read(v)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Println(k, v)
+	err = db.Put(k, v, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
